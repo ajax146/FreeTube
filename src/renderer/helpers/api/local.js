@@ -111,7 +111,7 @@ async function createInnertube({ withPlayer = false, location = undefined, safet
     location: location,
     enable_safety_mode: !!safetyMode,
     client_type: clientType,
-    player_id: '20514@9f4cc5e4',
+    player_id: '9f4cc5e4',
 
     // use browser fetch
     fetch: (fetchFunc ?? ((input, init) => fetch(input, init))),
