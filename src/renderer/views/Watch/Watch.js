@@ -23,7 +23,6 @@ import {
   showToast
 } from '../../helpers/utils'
 import {
-  formatHasVoiceBoostTag,
   getLocalVideoInfo,
   mapLocalLegacyFormat,
   parseLocalSubscriberCount,
@@ -457,7 +456,7 @@ export default defineComponent({
         }
 
         // extract localised title first and fall back to the not localised one
-        this.videoTitle = result.primary_info?.title.text ?? result.basic_info.title
+        this.videoTitle = result.primary_info?.title.text?.trim() ?? result.basic_info.title?.trim()
         this.videoViewCount = result.basic_info.view_count ?? (result.primary_info.view_count ? extractNumberFromString(result.primary_info.view_count.text) : null)
         this.license = result.secondary_info.metadata.rows.find(element => element.title?.text === 'License')?.contents[0]?.text
 
@@ -1575,7 +1574,7 @@ export default defineComponent({
           audioSampleRate: format.audio_sample_rate,
           audioChannels: format.audio_channels,
           isDrc: format.is_drc,
-          isVoiceBoost: formatHasVoiceBoostTag(format),
+          isVoiceBoost: format.is_vb,
           isOriginal: format.is_original,
           isDubbed: format.is_dubbed,
           isAutoDubbed: format.is_auto_dubbed,
@@ -1647,10 +1646,10 @@ export default defineComponent({
      * @param {Intl.DisplayNames} languageNames
      */
     generateAudioTrackFieldInvidious: function (format, languageNames) {
-      let type = ''
+      let type
 
       // use the same id numbers as YouTube (except -1, when we aren't sure what it is)
-      let idNumber = ''
+      let idNumber
 
       if (format.is_descriptive) {
         type = ' descriptive'
