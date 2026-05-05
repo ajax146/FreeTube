@@ -45,15 +45,13 @@ Search / Go to URL: 'Buscar / Ir a la URL'
   # In Filter Button
 Search Filters:
   Search Filters: 'Filtros de búsqueda'
-  Sort By:
+  Prioritize:
     Most Relevant: 'Más relevantes'
-    Rating: 'Mejor valorados'
-    Upload Date: 'Fecha de publicación'
-    View Count: 'Número de visitas'
+    Prioritize: Priorizar
+    Popularity: Popularidad
   Time:
     Time: 'Publicado en'
     Any Time: 'Cualquier momento'
-    Last Hour: 'En la última hora'
     Today: 'Hoy'
     This Week: 'Esta semana'
     This Month: 'Este mes'
@@ -68,10 +66,9 @@ Search Filters:
   Duration:
     Duration: 'Duración'
     All Durations: 'Cualquier duración'
-    Short (< 4 minutes): 'Corta (< 4 minutos)'
-    Long (> 20 minutes): 'Larga (> 20 minutos)'
-  # On Search Page
-    Medium (4 - 20 minutes): Media (4 - 20 minutos)
+    '< 3 minutes': '< 3 minutos'
+    '> 20 minutes': '> 20 minutos'
+    '3 - 20 minutes': 3 - 20 minutos
   Search Results: 'Resultados de la búsqueda'
   Fetching results. Please wait: 'Obteniendo resultados. Por favor, espere'
   Fetch more results: 'Obtener más resultados'
@@ -230,7 +227,6 @@ Settings:
       Blur: Difuminar
     Region for Trending: 'Región de las tendencias'
         #! List countries
-    Check for Latest Blog Posts: Buscar últimas publicaciones del blog
     Check for Updates: Buscar actualizaciones
     View all Invidious instance information: Ver toda la información sobre la instancia de Invidious
     System Default: Predeterminado del sistema
@@ -623,7 +619,6 @@ About:
   Chat on Matrix: Chat en Matrix
   Mastodon: Mastodon (red social)
   Email: Correo electrónico
-  Blog: Blog
   Website: Sitio web
   Please check for duplicates before posting: Por favor, antes de publicar asegúrate de no duplicar temas
   GitHub issues: Sugerencias en GitHub
@@ -855,7 +850,7 @@ Video:
   DRMProtected: Los videos restringidos con DRM no pueden reproducirse en FreeTube, dado que requieren componentes propietarias de fuente cerrada. Si desea ver este video, por favor véalo en la página oficial de YouTube con un buscador que tenga DRM habilitado.
   Watched Progress Saved: Progreso de visualización guardado
   Save Watched Progress: Guardar progreso de visualización
-  Popout Live Chat: Chat popout
+  Popout Live Chat: Ventana emergente de chat
   Watch:
     'Remaining preroll-ad time: {remindingTimeSeconds}s': 'Tiempo restante previo al anuncio: {remindingTimeSeconds} s'
     'Remaining SABR backoff time: {remindingTimeSeconds}s': 'Tiempo restante de retroceso de SABR: {remindingTimeSeconds} s'
@@ -945,7 +940,6 @@ Canceled next video autoplay: 'La reproducción del vídeo siguiente se ha cance
 
 Yes: 'Sí'
 No: 'No'
-A new blog is now available, {blogTitle}. Click to view more: 'Nueva publicación del blog disponible, {blogTitle}. Haga clic para saber más'
 Download From Site: Descargar desde el sitio web
 Version {versionNumber} is now available!  Click for more details: ¡La versión {versionNumber} está disponible! Haz clic para saber más
 The playlist has been reversed: Orden de lista de reproducción invertido
@@ -985,7 +979,7 @@ Tooltips:
     UseDeArrowTitles: Sustituye los títulos de los vídeos por títulos enviados por los usuarios desde DeArrow.
     UseDeArrowThumbnails: Sustituye las miniaturas de vídeo por miniaturas de DeArrow.
 More: Más
-Unknown YouTube url type, cannot be opened in app: Tipo de URL desconocido. No se puede abrir en la aplicación
+Unknown YouTube url type, cannot be opened in app: Tipo de URL de YouTube desconocido. No se puede abrir en la aplicación
 Open New Window: Abrir ventana nueva
 Playing Next Video Interval: Reproduciendo el vídeo a continuación. Haz clic para cancelar. | El siguiente vídeo se reproducirá en {nextVideoInterval} segundos. Haz clic para cancelar. | El siguiente vídeo se reproducirá en {nextVideoInterval} segundos. Haz clic para cancelar.
 Default Invidious instance has been cleared: La instancia de Invidious predeterminada ha sido borrada

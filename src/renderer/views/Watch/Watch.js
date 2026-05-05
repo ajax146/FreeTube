@@ -10,10 +10,9 @@ import WatchVideoChapters from '../../components/WatchVideoChapters/WatchVideoCh
 import WatchVideoDescription from '../../components/WatchVideoDescription/WatchVideoDescription.vue'
 import CommentSection from '../../components/CommentSection/CommentSection.vue'
 import WatchVideoLiveChat from '../../components/WatchVideoLiveChat/WatchVideoLiveChat.vue'
-import WatchVideoPlaylist from '../../components/watch-video-playlist/watch-video-playlist.vue'
+import WatchVideoPlaylist from '../../components/WatchVideoPlaylist/WatchVideoPlaylist.vue'
 import WatchVideoRecommendations from '../../components/WatchVideoRecommendations/WatchVideoRecommendations.vue'
 import FtAgeRestricted from '../../components/FtAgeRestricted/FtAgeRestricted.vue'
-import packageDetails from '../../../../package.json'
 import {
   buildVTTFileLocally,
   copyToClipboard,
@@ -436,18 +435,14 @@ export default defineComponent({
 
         this.isFamilyFriendly = result.basic_info.is_family_safe
 
-        const recommendedVideos = result.watch_next_feed
+        this.recommendedVideos = result.watch_next_feed
           ?.filter((item) => {
             return item.type === 'CompactVideo' || item.type === 'CompactMovie' ||
               (item.type === 'LockupView' && item.content_type === 'VIDEO')
           })
-          .map(parseLocalWatchNextVideo) ?? []
-
-        // place watched recommended videos last
-        this.recommendedVideos = [
-          ...recommendedVideos.filter((video) => !this.isRecommendedVideoWatched(video.videoId)),
-          ...recommendedVideos.filter((video) => this.isRecommendedVideoWatched(video.videoId))
-        ]
+          .map(parseLocalWatchNextVideo)
+          // place watched recommended videos last
+          .sort(this.sortWatchedVideosLast) ?? []
 
         if (this.showFamilyFriendlyOnly && !this.isFamilyFriendly) {
           this.isLoading = false
@@ -933,10 +928,8 @@ export default defineComponent({
           })
 
           // place watched recommended videos last
-          this.recommendedVideos = [
-            ...recommendedVideos.filter((video) => !this.isRecommendedVideoWatched(video.videoId)),
-            ...recommendedVideos.filter((video) => this.isRecommendedVideoWatched(video.videoId))
-          ]
+          this.recommendedVideos = recommendedVideos.sort(this.sortWatchedVideosLast)
+
           this.isLive = result.liveNow
           this.isFamilyFriendly = result.isFamilyFriendly
           this.isPostLiveDvr = !!result.isPostLiveDvr
@@ -1202,8 +1195,25 @@ export default defineComponent({
       })
     },
 
+    /**
+     * @param {{ videoId: string }} a
+     * @param {{ videoId: string }} b
+     */
+    sortWatchedVideosLast: function (a, b) {
+      const aWasWatched = this.isRecommendedVideoWatched(a.videoId)
+      const bWasWatched = this.isRecommendedVideoWatched(b.videoId)
+
+      if (aWasWatched && !bWasWatched) {
+        return 1
+      } else if (!aWasWatched && bWasWatched) {
+        return -1
+      } else {
+        return 0
+      }
+    },
+
     isRecommendedVideoWatched: function (videoId) {
-      return !!this.$store.getters.getHistoryCacheById[videoId]
+      return Object.hasOwn(this.$store.getters.getHistoryCacheById, videoId)
     },
 
     handleVideoLoaded: function () {
@@ -1788,28 +1798,13 @@ export default defineComponent({
       return Math.floor(this.getWatchedProgress())
     },
 
-    getPlaylistIndex: function () {
-      return this.$refs.watchVideoPlaylist
-        ? this.getPlaylistReverse()
-          ? this.$refs.watchVideoPlaylist.playlistItems.length - this.$refs.watchVideoPlaylist.currentVideoIndexOneBased
-          : this.$refs.watchVideoPlaylist.currentVideoIndexZeroBased
-        : -1
-    },
-
-    getPlaylistReverse: function () {
-      return this.$refs.watchVideoPlaylist ? this.$refs.watchVideoPlaylist.reversePlaylist : false
-    },
-
-    getPlaylistShuffle: function () {
-      return this.$refs.watchVideoPlaylist ? this.$refs.watchVideoPlaylist.shuffleEnabled : false
-    },
-
-    getPlaylistLoop: function () {
-      return this.$refs.watchVideoPlaylist ? this.$refs.watchVideoPlaylist.loopEnabled : false
+    getPlaylistState: function () {
+      return this.$refs.watchVideoPlaylist?.getState() ??
+        { index: -1, reverse: false, shuffle: false, loop: false }
     },
 
     updateTitle: function () {
-      this.setAppTitle(`${this.videoTitle} - ${packageDetails.productName}`)
+      this.setAppTitle(this.videoTitle)
     },
 
     isHiddenVideo: function (forbiddenTitles, channelsHidden, video) {
