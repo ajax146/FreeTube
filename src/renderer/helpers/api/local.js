@@ -288,7 +288,7 @@ export async function getLocalPlaylistContinuation(playlist) {
 }
 
 /**
- * Callback for adding two numbers.
+ * Callback for processing a Local playlist.
  *
  * @callback untilEndOfLocalPlayListCallback
  * @param {import('youtubei.js').YT.Playlist} playlist
@@ -379,12 +379,12 @@ export async function getLocalSearchContinuation(continuationData) {
 }
 
 /**
- * @param {string} videoId
- * @param {(input, init) => Promise<Response>} fetchFunc
+ * @param {string} url
+ * @param {string} kind
  */
-async function getWatchHTMLWatchPage(videoId, fetchFunc) {
+async function getHTMLPage(url, kind) {
   // This returns session/tracking cookies but they get removed in onHeadersReceived in the main process before they are saved by Electron
-  const htmlResponse = await fetch(`https://www.youtube.com/watch?v=${videoId}&bpctr=9999999999&has_verified=1`,
+  const htmlResponse = await fetch(url,
     {
       headers: {
         // We need to be able to parse the localised strings in the /next response data (e.g. view counts and published dates)
@@ -398,7 +398,7 @@ async function getWatchHTMLWatchPage(videoId, fetchFunc) {
   const ytConfigStr = htmlPage.match(/ytcfg\.set\(({.+?})\);/s)?.[1]
   if (!ytConfigStr) {
     // required for botguard
-    throw new Error('Could not find ytcfg in the HTML page')
+    throw new Error(`Could not find ytcfg in the ${kind} HTML page`)
   }
 
   const ytConfig = JSON.parse(ytConfigStr)
@@ -407,7 +407,7 @@ async function getWatchHTMLWatchPage(videoId, fetchFunc) {
 
   if (!initialAttestationDataMatch) {
     // required for botguard
-    throw new Error('Could not find challenge in the HTML page')
+    throw new Error(`Could not find challenge in the ${kind} HTML page`)
   }
 
   let initialAttestationData
@@ -415,42 +415,74 @@ async function getWatchHTMLWatchPage(videoId, fetchFunc) {
   try {
     initialAttestationData = parseLooseJSON(initialAttestationDataMatch[1])
   } catch (e) {
-    const error = new Error('Failed to parse the initial attestation data', { cause: e })
+    const error = new Error(`Failed to parse the ${kind} home page initial attestation data`, { cause: e })
     console.error(error, initialAttestationDataMatch[1])
     throw error
   }
 
-  /** @type {string | undefined} */
   let playerId = ytConfig.PLAYER_JS_URL?.match(/player\/([^/]+)\//)?.[1]
 
   playerId ??= htmlPage.match(/<script[^>]+src="[^">]+player\/([^/]+)\/[^"]+\/base.js"/)?.[1]
 
-  const playerResponseStr = htmlPage.match(/ytInitialPlayerResponse\s*=\s*(\{.+?\});/)?.[1]
-  let playerResponse
-
-  // not fatal if it is missing as we can retrieve it from Innertube ourselves
-  if (playerResponseStr) {
-    try {
-      playerResponse = JSON.parse(playerResponseStr)
-    } catch (e) {
-      console.warn('/player response extracted from the HTML page is invalid JSON', e)
-    }
-  } else {
-    console.warn('Could not find /player response in the HTML page')
+  return {
+    htmlPage,
+    ytConfig,
+    initialAttestationData,
+    playerId
   }
+}
 
-  const nextResponseStr = htmlPage.match(/(?:window\s*\[\s*["']ytInitialData["']\s*\]|ytInitialData)\s*=\s*(\{.+?\});/)?.[1]
-  let nextResponse
+/**
+ * @param {string} videoId
+ * @param {(input, init) => Promise<Response>} fetchFunc
+ */
+async function getWatchHTMLWatchPage(videoId, fetchFunc) {
+  let htmlPage, ytConfig, initialAttestationData
 
-  // not fatal if it is missing as we can retrieve it from Innertube ourselves
-  if (nextResponseStr) {
-    try {
-      nextResponse = JSON.parse(nextResponseStr)
-    } catch (e) {
-      console.warn('/next response extracted from the HTML page is invalid JSON', e)
-    }
+  let playerResponse, nextResponse
+  /** @type {string | undefined} */
+  let playerId
+
+  if (sessionStorage.getItem('playerHtmlHomepageFallback') === '1') {
+    ({ ytConfig, initialAttestationData, playerId } = await getHTMLPage('https://www.youtube.com', 'home'))
   } else {
-    console.warn('Could not find /next response in the HTML page')
+    try {
+      ({ htmlPage, ytConfig, initialAttestationData, playerId } = await getHTMLPage(`https://www.youtube.com/watch?v=${videoId}&bpctr=9999999999&has_verified=1`, 'watch'))
+
+      const playerResponseStr = htmlPage.match(/ytInitialPlayerResponse\s*=\s*(\{.+?\});/)?.[1]
+
+      // not fatal if it is missing as we can retrieve it from Innertube ourselves
+      if (playerResponseStr) {
+        try {
+          playerResponse = JSON.parse(playerResponseStr)
+        } catch (e) {
+          console.warn('/player response extracted from the HTML page is invalid JSON', e)
+        }
+      } else {
+        console.warn('Could not find /player response in the HTML page')
+      }
+
+      const nextResponseStr = htmlPage.match(/(?:window\s*\[\s*["']ytInitialData["']\s*\]|ytInitialData)\s*=\s*(\{.+?\});/)?.[1]
+
+      // not fatal if it is missing as we can retrieve it from Innertube ourselves
+      if (nextResponseStr) {
+        try {
+          nextResponse = JSON.parse(nextResponseStr)
+        } catch (e) {
+          console.warn('/next response extracted from the HTML page is invalid JSON', e)
+        }
+      } else {
+        console.warn('Could not find /next response in the HTML page')
+      }
+    } catch (watchError) {
+      console.warn('Falling back to the YT home page for the rest of the session because of:', watchError)
+
+      // Fall back to the home page for the rest of the session/until FreeTube is restarted
+      // assuming that getting the watch page captcha once is a sign that it will continue happening
+      sessionStorage.setItem('playerHtmlHomepageFallback', '1');
+
+      ({ ytConfig, initialAttestationData, playerId } = await getHTMLPage('https://www.youtube.com', 'home'))
+    }
   }
 
   const session = buildSessionFromYtConfig(ytConfig, fetchFunc)
@@ -480,7 +512,7 @@ function buildSessionFromYtConfig(ytConfig, fetchFunc) {
   context.client.screenDensityFloat ??= 1
   context.client.screenHeightPoints ??= 1440
   context.client.screenPixelDensity ??= 1
-  context.client.timeZone ??= 2560
+  context.client.screenWidthPoints ??= 2560
   context.client.utcOffsetMinutes ??= -Math.floor((new Date()).getTimezoneOffset())
   context.client.memoryTotalKbytes ??= '8000000'
 
@@ -772,7 +804,7 @@ function extractTotalAdTimeMilliseconds(json) {
  * @param {string} id
  */
 export async function getLocalComments(id) {
-  const innertube = await createInnertube()
+  const innertube = await createInnertube({ generateSessionLocally: false })
   return innertube.getComments(id)
 }
 
@@ -1622,6 +1654,11 @@ export function parseLocalListVideo(item, channelId, channelName) {
     /** @type {import('youtubei.js').YTNodes.GridVideo} */
     const video = item
 
+    // This can happen for unavailable clip on channel home page
+    if (!video.video_id) {
+      return null
+    }
+
     let publishedText
 
     if (video.published != null && !video.published.isEmpty()) {
@@ -1792,7 +1829,9 @@ function parseLockupView(lockupView, channelId = undefined, channelName = undefi
       }
     }
     case 'SHORT':
+    case 'STATION':
     case 'VIDEO': {
+      const isStation = lockupView.content_type === 'STATION'
       let publishedText
       let lengthSeconds = ''
       let liveNow = false
@@ -1807,7 +1846,8 @@ function parseLockupView(lockupView, channelId = undefined, channelName = undefi
       }
 
       /** @type {YTNodes.ThumbnailBottomOverlayView | undefined } */
-      const thumbnailBottomOverlayView = lockupView.content_image?.overlays?.firstOfType(YTNodes.ThumbnailBottomOverlayView)
+      const thumbnailBottomOverlayView = lockupView.content_image?.overlays?.firstOfType(YTNodes.ThumbnailBottomOverlayView) ??
+        lockupView.content_image?.primary_thumbnail?.overlays?.firstOfType(YTNodes.ThumbnailBottomOverlayView)
 
       if (thumbnailBottomOverlayView) {
         if (thumbnailBottomOverlayView.badges.some(badge => badge.badge_style === 'THUMBNAIL_OVERLAY_BADGE_STYLE_LIVE')) {
@@ -1869,6 +1909,11 @@ function parseLockupView(lockupView, channelId = undefined, channelName = undefi
         author = maybeAuthorText
       }
 
+      // I think this is only used for stations at the moment
+      if (author == null) {
+        author = lockupView.metadata?.metadata?.metadata_rows?.[0]?.metadata_parts?.[0]?.avatar_stack?.text?.text
+      }
+
       return {
         type: 'video',
         videoId: lockupView.content_id,
@@ -1880,6 +1925,7 @@ function parseLockupView(lockupView, channelId = undefined, channelName = undefi
         lengthSeconds,
         liveNow,
         isUpcoming,
+        isStation,
         premiereDate
       }
     }
@@ -2219,51 +2265,47 @@ export function mapLocalLegacyFormat(format) {
  * The complete Triforce, or one or more components of the Triforce.
  * @typedef {object} LocalComment
  * @property {string} id
- * @property {string} dataType
- * @property {string} authorLink
+ * @property {'local'} dataType
  * @property {string} author
  * @property {string} authorId
  * @property {string} authorThumb
- * @property {boolean} isPinned
- * @property {boolean} isOwner
- * @property {boolean} isMember
+ * @property {number} likes
  * @property {string} text
+ * @property {string} time
  * @property {boolean} isHearted
+ * @property {boolean} isMember
+ * @property {boolean} isOwner
+ * @property {boolean} isPinned
  * @property {boolean} hasOwnerReplied
  * @property {boolean} hasReplyToken
- * @property {CommentThread} replyToken
- * @property {boolean} showReplies
- * @property {LocalComment[]} replies
+ * @property {(YTNodes.CommentThread | Misc.CommentsContinuation)?} replyToken
+ * @property {number} replyLevel
  * @property {string} memberIconUrl
- * @property {string} time
- * @property {number} likes
  * @property {number} numReplies
  */
 /**
  * @param {import('youtubei.js').YTNodes.CommentView} comment
- * @param {import('youtubei.js').YTNodes.CommentThread} commentThread
- * @return LocalComment
+ * @param {import('youtubei.js').YTNodes.CommentThread | undefined} commentThread
+ * @return {LocalComment}
  */
 export function parseLocalComment(comment, commentThread = undefined) {
+  const replyToken = commentThread ?? null
   let hasOwnerReplied = false
-  let replyToken = null
   let hasReplyToken = false
 
   if (commentThread?.has_replies) {
-    hasOwnerReplied = commentThread.comment_replies_data.has_channel_owner_replied
-    replyToken = commentThread
+    hasOwnerReplied = !!commentThread.comment_replies_data?.has_channel_owner_replied
     hasReplyToken = true
   }
 
-  const commentTextRuns = comment.voice_reply_container?.transcript_text ? comment.voice_reply_container.transcript_text.runs : comment.content.runs
+  const commentTextRuns = comment.voice_reply_container?.transcript_text?.runs ?? comment.content?.runs ?? []
 
   return {
     id: comment.comment_id,
     dataType: 'local',
-    authorLink: comment.author.id,
-    author: comment.author.name,
-    authorId: comment.author.id,
-    authorThumb: comment.author.best_thumbnail.url,
+    author: comment.author?.name ?? '',
+    authorId: comment.author?.id ?? '',
+    authorThumb: comment.author?.best_thumbnail?.url ?? '',
     isPinned: comment.is_pinned,
     isOwner: !!comment.author_is_channel_owner,
     isMember: !!comment.is_member,
@@ -2272,12 +2314,11 @@ export function parseLocalComment(comment, commentThread = undefined) {
     hasOwnerReplied,
     hasReplyToken,
     replyToken,
-    showReplies: false,
-    replies: [],
-    memberIconUrl: comment.is_member ? comment.member_badge.url : '',
-    time: getRelativeTimeFromDate(calculatePublishedDate(comment.published_time.replace('(edited)', '').trim()), false),
-    likes: comment.like_count,
-    numReplies: parseLocalSubscriberCount(comment.reply_count)
+    replyLevel: comment.reply_level ?? 0,
+    memberIconUrl: comment.member_badge?.url ?? '',
+    time: getRelativeTimeFromDate(calculatePublishedDate((comment.published_time ?? '').replace('(edited)', '').trim()) ?? 0, false),
+    likes: parseLocalSubscriberCount(comment.like_count?.trim() || '0'),
+    numReplies: hasReplyToken ? parseLocalSubscriberCount(comment.reply_count_a11y ?? '0') : 0
   }
 }
 
@@ -2455,7 +2496,7 @@ export async function getLocalCommunityPost(postId, channelId) {
  * @param {string} channelId
  */
 export async function getLocalCommunityPostComments(postId, channelId) {
-  const innertube = await createInnertube()
+  const innertube = await createInnertube({ generateSessionLocally: false })
 
   return await innertube.getPostComments(postId, channelId)
 }
